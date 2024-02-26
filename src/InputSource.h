@@ -10,13 +10,13 @@
 
 class RawImage {
 public:
-    explicit RawImage(const std::string& path);
+    RawImage(unsigned char* buffer, size_t bsize, int width, int height, CfaPattern pattern);
 
-    ~RawImage() = default;
+    ~RawImage();
 
-    int GetWidth() const { return RawProcessor->imgdata.rawdata.sizes.width; }
+    int GetWidth();
 
-    int GetHeight() const { return RawProcessor->imgdata.rawdata.sizes.height; }
+    int GetHeight();
 
     int GetScalarBlackLevel() const;
 
@@ -27,6 +27,7 @@ public:
     WhiteBalance GetWhiteBalance() const;
 
     std::string GetCfaPatternString() const;
+
     CfaPattern GetCfaPattern() const;
 
     Halide::Runtime::Buffer<float> GetColorCorrectionMatrix() const;
@@ -37,7 +38,7 @@ public:
     void WriteDng(const std::string& path, const Halide::Runtime::Buffer<uint16_t>& buffer = {}) const;
 
     std::shared_ptr<LibRaw> GetRawProcessor() const { return RawProcessor; }
-private:
-    std::string Path;
     std::shared_ptr<LibRaw> RawProcessor;
+private:
+    CfaPattern Pattern;
 };

@@ -9,17 +9,15 @@
 
 class Burst {
 public:
-    Burst(std::string dir_path, std::vector<std::string> inputs)
-        : Dir(std::move(dir_path))
-        , Inputs(std::move(inputs))
-        , Raws(LoadRaws(Dir, Inputs))
+    Burst(unsigned char* buffer, size_t fSize, size_t numImages, int width, int height, CfaPattern pattern)
+        : Raws(LoadRaws(buffer, fSize, numImages, width, height, pattern))
     {}
 
     ~Burst() = default;
 
-    int GetWidth() const { return Raws.empty() ? -1 : Raws[0].GetWidth(); }
+    int GetWidth();
 
-    int GetHeight() const { return Raws.empty() ? -1 : Raws[0].GetHeight(); }
+    int GetHeight();
 
     int GetBlackLevel() const { return Raws.empty() ? -1 : Raws[0].GetScalarBlackLevel(); }
 
@@ -31,17 +29,15 @@ public:
     
     Halide::Runtime::Buffer<float> GetColorCorrectionMatrix() const { return Raws.empty() ? Halide::Runtime::Buffer<float>() : Raws[0].GetColorCorrectionMatrix(); }
 
-    Halide::Runtime::Buffer<uint16_t> ToBuffer() const;
+    Halide::Runtime::Buffer<uint16_t> ToBuffer();
 
-    void CopyToBuffer(Halide::Runtime::Buffer<uint16_t>& buffer) const;
+    void CopyToBuffer(Halide::Runtime::Buffer<uint16_t>& buffer);
 
     const RawImage& GetRaw(const size_t i) const;
 
-private:
-    std::string Dir;
-    std::vector<std::string> Inputs;
+public:
     std::vector<RawImage> Raws;
 
 private:
-    static std::vector<RawImage> LoadRaws(const std::string& dirPath, std::vector<std::string>& inputs);
+    static std::vector<RawImage> LoadRaws(unsigned char* buffer, size_t fSize, size_t numImages, int width, int height, CfaPattern pattern);
 };

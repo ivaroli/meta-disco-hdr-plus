@@ -11,9 +11,9 @@ Original Document on the subject (by Timothy Brooks): http://timothybrooks.com/t
 5. From the project root directory, run the following commands:
 ```
 mkdir build
+cmake -DHALIDE_DISTRIB_DIR=/home/ivar/downloads/Halide-build -S . -B ./build/
 cd build
-cmake -DHALIDE_DISTRIB_DIR=$(Insert halide directory) ..
-make -j$(expr $(nproc) \+ 1)
+make -j8
 ```
 
 ### HDR+ algorithm examples:

@@ -15,21 +15,21 @@
  * processes main stages of the pipeline.
  */
 class HDRPlus {
-    const Burst& burst;
 public:
-    const Compression c;
-    const Gain g;
+    Compression c;
+    Gain g;
+    Burst& burst;
     
-    HDRPlus(Burst burst, const Compression  c, const Gain g)
-        : burst(burst)
-        , c(c)
-        , g(g)
+    HDRPlus(Burst& burst, Compression  _c, Gain _g): burst(burst)
     {
+        c = _c;
+        g = _g;
+        burst = burst;
     }
     
     Halide::Runtime::Buffer<uint8_t> process() {
-        const int width = burst.GetWidth();
-        const int height = burst.GetHeight();
+        int width = burst.GetWidth();
+        int height = burst.GetHeight();
 
         Halide::Runtime::Buffer<uint8_t> output_img(3, width, height);
 
@@ -67,6 +67,33 @@ public:
     }
 };
 
+unsigned char* readBinaryFile(const std::string& filename, size_t fileSize) {
+    std::ifstream file(filename, std::ios::binary);
+    if (!file.is_open()) {
+        std::cerr << "Failed to open file: " << filename << std::endl;
+        return nullptr;
+    }
+
+    unsigned char* buffer = new unsigned char[fileSize];
+    file.read(reinterpret_cast<char*>(buffer), fileSize);
+    file.close();
+
+    return buffer;
+}
+
+size_t getFileSize(const std::string& filename) {
+    std::ifstream file(filename, std::ios::binary);
+    if (!file.is_open()) {
+        std::cerr << "Failed to open file: " << filename << std::endl;
+        return 0;
+    }
+
+    file.seekg(0, std::ios::end);
+    std::streamsize fileSize = file.tellg();
+    file.close();
+
+    return fileSize;
+}
 
 int main(int argc, char* argv[]) {
     
@@ -108,15 +135,28 @@ int main(int argc, char* argv[]) {
         in_names.emplace_back(argv[i++]);
     }
 
-    Burst burst(dir_path, in_names);
+    // Hardcoded test values
+    CfaPattern pattern = CfaPattern::CFA_GRBG;
+    size_t fileSize = getFileSize(dir_path + in_names.at(0));
+    unsigned char* buffer = new unsigned char[in_names.size()*fileSize];
+    size_t WIDTH=2592, HEIGHT=1944;
 
+    for(size_t i = 0; i < in_names.size(); i++){
+        std::string f = in_names.at(i);
+        unsigned char* fBuffer = readBinaryFile(dir_path + f, fileSize);
+        memcpy(&buffer[i*fileSize], fBuffer, fileSize);
+        delete[] fBuffer;
+    }
+
+    Burst burst(buffer, fileSize, in_names.size(), WIDTH, HEIGHT, pattern);
     HDRPlus hdr_plus(burst, c, g);
-
     Halide::Runtime::Buffer<uint8_t> output = hdr_plus.process();
 
     if (!HDRPlus::save_png(dir_path, out_name, output)) {
+        std::cerr << "Saving failure" << std::endl;
         return EXIT_FAILURE;
     }
 
+    delete[] buffer;
     return 0;
 }

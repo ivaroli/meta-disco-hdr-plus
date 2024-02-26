@@ -5,36 +5,64 @@
 
 #include "LibRaw2DngConverter.h"
 
-RawImage::RawImage(const std::string &path)
-    : Path(path)
-    , RawProcessor(std::make_shared<LibRaw>())
+RawImage::RawImage(unsigned char* buffer, size_t bsize, int width, int height, CfaPattern pattern)
+    : Pattern(pattern)
 {
-//    TODO: Check LibRaw parametres.
-//    RawProcessor->imgdata.params.X = Y;
-
-    std::cerr << "Opening " << path << std::endl;
-    if (int err = RawProcessor->open_file(path.c_str())) {
-        std::cerr << "Cannot open file " << path << " error: " << libraw_strerror(err) << std::endl;
-        throw std::runtime_error("Error opening " + path);
-    }
-    if (int err = RawProcessor->unpack())
+    // set the corrisponding libraw pattern
+    LibRaw_openbayer_patterns librawPat = LIBRAW_OPENBAYER_BGGR;
+    switch (pattern)
     {
-        std::cerr << "Cannot unpack file " << path << " error: " << libraw_strerror(err) << std::endl;
-        throw std::runtime_error("Error opening " + path);
+    case CfaPattern::CFA_GBRG:
+        librawPat = LIBRAW_OPENBAYER_GBRG;
+        break;
+    case CfaPattern::CFA_GRBG:
+        librawPat = LIBRAW_OPENBAYER_GRBG;
+        break;
+    case CfaPattern::CFA_RGGB:
+        librawPat = LIBRAW_OPENBAYER_RGGB;
+        break;
+    default:
+        break;
     }
-    if (int ret = RawProcessor->raw2image()) {
-        std::cerr << "Cannot do raw2image on " << path << " error: " << libraw_strerror(ret) << std::endl;
-        throw std::runtime_error("Error opening " + path);
+
+    this->RawProcessor = std::make_shared<LibRaw>();
+    int ret = RawProcessor->open_bayer(buffer, bsize, width, height,0, 0, 0, 0, 0, librawPat, 0, 0, 1400);
+
+    if (ret != LIBRAW_SUCCESS){
+        std::cerr << "Cannot do open_bayer, error: " << libraw_strerror(ret) << std::endl;
+        throw std::runtime_error("open_bayer error");
+    }
+    if ((ret = RawProcessor->unpack()) != LIBRAW_SUCCESS){
+        std::cerr << "Cannot do unpack, error: " << libraw_strerror(ret) << std::endl;
+        throw std::runtime_error("unpack error");
+    }
+    
+    if ((ret = RawProcessor->dcraw_process()) != LIBRAW_SUCCESS){
+        std::cerr << "Cannot do dcraw_process, error: " << libraw_strerror(ret) << std::endl;
+        throw std::runtime_error("dcraw_process error");
     }
 }
 
+RawImage::~RawImage(){
+}
+
+int RawImage::GetWidth() { 
+    std::cout << std::endl;
+
+    return this->RawProcessor->imgdata.rawdata.sizes.width; 
+}
+
+int RawImage::GetHeight() { 
+    return this->RawProcessor->imgdata.rawdata.sizes.height; 
+}
+
 WhiteBalance RawImage::GetWhiteBalance() const {
-    const auto coeffs = RawProcessor->imgdata.color.cam_mul;
+    const auto coeffs = RawProcessor->imgdata.rawdata.color.cam_mul;
     // Scale multipliers to green channel
-    const float r = coeffs[0] / coeffs[1];
+    const float r = 2.5777f;//coeffs[0] / coeffs[1];
     const float g0 = 1.f; // same as coeffs[1] / coeffs[1];
     const float g1 = 1.f;
-    const float b = coeffs[2] / coeffs[1];
+    const float b = 1.09253f;//coeffs[2] / coeffs[1];
     return WhiteBalance{r, g0, g1, b};
 }
 
@@ -53,6 +81,18 @@ void RawImage::WriteDng(const std::string &output_path, const Halide::Runtime::B
     LibRaw2DngConverter converter(*this);
     converter.SetBuffer(buffer);
     converter.Write(output_path);
+}
+
+std::string RawImage::GetCfaPatternString() const {
+    if (this->Pattern == CfaPattern::CFA_RGGB) {
+        return std::string{0, 1, 1, 2};
+    } else if (this->Pattern == CfaPattern::CFA_GRBG) {
+        return std::string{1, 0, 2, 1};
+    } else if (this->Pattern == CfaPattern::CFA_BGGR) {
+        return std::string{2, 1, 1, 0};
+    } else if (this->Pattern == CfaPattern::CFA_GBRG) {
+        return std::string{1, 2, 0, 1};
+    }
 }
 
 std::array<float, 4> RawImage::GetBlackLevel() const {
@@ -84,37 +124,8 @@ int RawImage::GetScalarBlackLevel() const {
     return static_cast<int>(*std::min_element(black_level.begin(), black_level.end()));
 }
 
-std::string RawImage::GetCfaPatternString() const {
-    static const std::unordered_map<char, char> CDESC_TO_CFA = {
-        {'R', 0},
-        {'G', 1},
-        {'B', 2},
-        {'r', 0},
-        {'g', 1},
-        {'b', 2}
-    };
-    const auto &cdesc = RawProcessor->imgdata.idata.cdesc;
-    return {
-        CDESC_TO_CFA.at(cdesc[RawProcessor->COLOR(0, 0)]),
-        CDESC_TO_CFA.at(cdesc[RawProcessor->COLOR(0, 1)]),
-        CDESC_TO_CFA.at(cdesc[RawProcessor->COLOR(1, 0)]),
-        CDESC_TO_CFA.at(cdesc[RawProcessor->COLOR(1, 1)])
-    };
-}
-
 CfaPattern RawImage::GetCfaPattern() const {
-    const auto cfa_pattern = GetCfaPatternString();
-    if (cfa_pattern == std::string{0, 1, 1, 2}) {
-        return CfaPattern::CFA_RGGB;
-    } else if (cfa_pattern == std::string{1, 0, 2, 1}) {
-        return CfaPattern::CFA_GRBG;
-    } else if (cfa_pattern == std::string{2, 1, 1, 0}) {
-        return CfaPattern::CFA_BGGR;
-    } else if (cfa_pattern == std::string{1, 2, 0, 1}) {
-        return CfaPattern::CFA_GBRG;
-    }
-    throw std::invalid_argument("Unsupported CFA pattern: " + cfa_pattern);
-    return CfaPattern::CFA_UNKNOWN;
+    return this->Pattern;
 }
 
 Halide::Runtime::Buffer<float> RawImage::GetColorCorrectionMatrix() const {
