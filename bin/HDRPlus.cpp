@@ -9,6 +9,7 @@
 
 #include <src/Burst.h>
 #include <hdrplus_pipeline.h>
+#include <align_and_merge.h>
 
 /*
  * HDRPlus Class -- Houses file I/O, defines pipeline attributes and calls
@@ -136,7 +137,11 @@ int main(int argc, char* argv[]) {
     }
 
     // Hardcoded test values
-    CfaPattern pattern = CfaPattern::CFA_GRBG;
+    // CFA_GRBG
+    // CFA_RGGB
+    // CFA_BGGR Correct?
+    // CFA_GBRG
+    CfaPattern pattern = CfaPattern::CFA_BGGR;
     size_t fileSize = getFileSize(dir_path + in_names.at(0));
     unsigned char* buffer = new unsigned char[in_names.size()*fileSize];
     size_t WIDTH=2592, HEIGHT=1944;

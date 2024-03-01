@@ -30,3 +30,8 @@ The -c and -g flags change the amount of dynamic range compression and gain resp
 ### Footnotes:
   
 ¹Also to install libraw, libpng, and libjpeg on macOS run ```brew install libraw libpng libjpeg```
+
+
+
+(cmake -DHALIDE_DISTRIB_DIR=/home/ivar/downloads/Halide-build -S . -B ./build/ && make -C ./build -j8)
+./build/hdrplus ./test/ test.png 0.raw 1.raw

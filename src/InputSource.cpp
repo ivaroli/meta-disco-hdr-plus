@@ -26,21 +26,25 @@ RawImage::RawImage(unsigned char* buffer, size_t bsize, int width, int height, C
     }
 
     this->RawProcessor = std::make_shared<LibRaw>();
+    this->RawProcessor->imgdata.params.output_tiff = 0;
+    this->RawProcessor->imgdata.params.no_auto_bright = 1;
+    this->RawProcessor->imgdata.params.output_bps = 10;
+    std::cout << "fdsa" << std::endl;
     int ret = RawProcessor->open_bayer(buffer, bsize, width, height,0, 0, 0, 0, 0, librawPat, 0, 0, 1400);
 
     if (ret != LIBRAW_SUCCESS){
-        std::cerr << "Cannot do open_bayer, error: " << libraw_strerror(ret) << std::endl;
+        std::cerr << "Cannot do open_bayer, error (" << ret << "): " << libraw_strerror(ret) << std::endl;
         throw std::runtime_error("open_bayer error");
     }
     if ((ret = RawProcessor->unpack()) != LIBRAW_SUCCESS){
-        std::cerr << "Cannot do unpack, error: " << libraw_strerror(ret) << std::endl;
+        std::cerr << "Cannot do unpack, error (" << ret << "): " << libraw_strerror(ret) << std::endl;
         throw std::runtime_error("unpack error");
     }
     
-    if ((ret = RawProcessor->dcraw_process()) != LIBRAW_SUCCESS){
-        std::cerr << "Cannot do dcraw_process, error: " << libraw_strerror(ret) << std::endl;
-        throw std::runtime_error("dcraw_process error");
-    }
+    // if ((ret = RawProcessor->dcraw_process()) != LIBRAW_SUCCESS){
+    //     std::cerr << "Cannot do dcraw_process, error (" << ret << "): " << libraw_strerror(ret) << std::endl;
+    //     throw std::runtime_error("dcraw_process error");
+    // }
 }
 
 RawImage::~RawImage(){
@@ -59,10 +63,10 @@ int RawImage::GetHeight() {
 WhiteBalance RawImage::GetWhiteBalance() const {
     const auto coeffs = RawProcessor->imgdata.rawdata.color.cam_mul;
     // Scale multipliers to green channel
-    const float r = 2.5777f;//coeffs[0] / coeffs[1];
+    const float r = 1;//2.5777f;//coeffs[0] / coeffs[1];
     const float g0 = 1.f; // same as coeffs[1] / coeffs[1];
     const float g1 = 1.f;
-    const float b = 1.09253f;//coeffs[2] / coeffs[1];
+    const float b = 1;//1.09253f;//coeffs[2] / coeffs[1];
     return WhiteBalance{r, g0, g1, b};
 }
 
@@ -78,9 +82,26 @@ void RawImage::CopyToBuffer(Halide::Runtime::Buffer<uint16_t> &buffer) const {
 
 void RawImage::WriteDng(const std::string &output_path, const Halide::Runtime::Buffer<uint16_t> &buffer) const
 {
-    LibRaw2DngConverter converter(*this);
-    converter.SetBuffer(buffer);
-    converter.Write(output_path);
+    // LibRaw2DngConverter converter(*this);
+    // converter.SetBuffer(buffer);
+    // converter.Write(output_path);
+
+    // Open a file for binary writing
+    std::ofstream outFile(output_path, std::ios::out | std::ios::binary);
+
+    // Check if the file opened successfully
+    if (!outFile) {
+        std::cerr << "Error opening file for writing!" << std::endl;
+        return;
+    }
+
+    // Write the raw data to the file
+    outFile.write(reinterpret_cast<char*>(buffer.data()), buffer.size_in_bytes());
+
+    std::cout << "Binary data saved to file successfully." << std::endl;
+
+    // Close the file
+    outFile.close();
 }
 
 std::string RawImage::GetCfaPatternString() const {
@@ -97,7 +118,7 @@ std::string RawImage::GetCfaPatternString() const {
 
 std::array<float, 4> RawImage::GetBlackLevel() const {
     // See https://www.libraw.org/node/2471
-    const auto raw_color = RawProcessor->imgdata.color;
+    const auto raw_color = RawProcessor->imgdata.rawdata.color;
     const auto base_black_level = static_cast<float>(raw_color.black);
 
     std::array<float, 4> black_level = {
@@ -129,11 +150,17 @@ CfaPattern RawImage::GetCfaPattern() const {
 }
 
 Halide::Runtime::Buffer<float> RawImage::GetColorCorrectionMatrix() const {
-    const auto raw_color = RawProcessor->imgdata.color;
+    //! TODO: make this into a constant
     Halide::Runtime::Buffer<float> ccm(3, 3);
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
-            ccm(i, j) = raw_color.rgb_cam[j][i];
+            if((i == 1 && j == 1) || (i == 2 && j == 2)){
+                ccm(i, j) = 1;
+            } else if(i == 0 && j == 0){
+                ccm(i, j) = 1;
+            } else {
+                ccm(i, j) = 0;   
+            }
         }
     }
     return ccm;
